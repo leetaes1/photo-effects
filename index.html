@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Stretch Tool</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #1a1a1a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        .controls {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #444;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        input[type="file"] { margin-bottom: 10px; }
+        .slider-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 12px; color: #aaa; }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+
+    <h1>Pixel Stretch Tool</h1>
+
+    <div class="controls">
+        <div class="slider-group">
+            <label>1. 이미지 선택</label>
+            <input type="file" id="upload" accept="image/*">
+        </div>
+        
+        <div class="slider-group">
+            <label>2. 스트레치 강도 (Threshold)</label>
+            <input type="range" id="threshold" min="0" max="255" value="100">
+        </div>
+
+        <button id="processBtn">효과 적용하기</button>
+        <button id="downloadBtn" style="background: #28a745;">저장하기</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const upload = document.getElementById('upload');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const thresholdInput = document.getElementById('threshold');
+        const processBtn = document.getElementById('processBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let originalImage = null;
+
+        // 이미지 업로드 처리
+        upload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    originalImage = img;
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 픽셀 스트레치 핵심 로직
+        function stretchPixels() {
+            if (!originalImage) return;
+
+            // 원본 다시 그리기
+            ctx.drawImage(originalImage, 0, 0);
+            
+            const width = canvas.width;
+            const height = canvas.height;
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            const threshold = parseInt(thresholdInput.value);
+
+            // 한 줄씩 분석 (Y축 루프)
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    
+                    // 밝기 계산 (Luminance)
+                    const brightness = (r + g + b) / 3;
+
+                    // 밝기가 설정값보다 낮으면 해당 픽셀을 오른쪽으로 쭉 늘림
+                    if (brightness < threshold) {
+                        // 현재 픽셀의 색상을 저장
+                        const targetR = r;
+                        const targetG = g;
+                        const targetB = b;
+                        const targetA = data[i + 3];
+
+                        // 현재 위치부터 오른쪽 끝까지 같은 색으로 채움
+                        for (let nextX = x; nextX < width; nextX++) {
+                            const nextI = (y * width + nextX) * 4;
+                            data[nextI] = targetR;
+                            data[nextI + 1] = targetG;
+                            data[nextI + 2] = targetB;
+                            data[nextI + 3] = targetA;
+                        }
+                        // 한 번 늘렸으면 해당 라인의 다음 픽셀 검사는 건너뜀 (이미 다 채웠으므로)
+                        break; 
+                    }
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        processBtn.addEventListener('click', stretchPixels);
+
+        // 이미지 저장
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'stretched-pixel.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+    </script>
+</body>
+</html>
